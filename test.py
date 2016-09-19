@@ -17,13 +17,19 @@ def angle(a,b):
         return math.acos(np.vdot(a,b))
     else:
         return math.pi*2 - math.acos(np.vdot(a,b))
-def box(size):
-    return [np.array([0,size]),np.array([size,size]),np.array([size,0]),np.array([0,0])]
+def box(width,height):
+    return [np.array([0,height]),np.array([width,height]),np.array([width,0]),np.array([0,0])]
 
-img = cv2.imread('./test.jpg')
+img = cv2.imread('./test4.jpg')
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-edges = cv2.Canny(blurred,75,200)
+blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+edges = cv2.Canny(blurred,75,250)
+
+plt.subplot(151),plt.imshow(img,cmap = 'gray')
+plt.title('Original Image'), plt.xticks([]), plt.yticks([])
+plt.subplot(152),plt.imshow(edges,cmap = 'gray')
+plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
+
 
 (cnts, _) = cv2.findContours(edges.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 cnts = sorted(cnts, key = cv2.contourArea, reverse = True)[:5]
@@ -40,6 +46,8 @@ for c in cnts:
         break
 
 if(not found):
+    print "no document found"
+    plt.show()
     sys.exit()
 
 centroid = reduce(lambda a,x: a + x,screenCnt)/4
@@ -50,12 +58,12 @@ ordered = sorted(shifted, key = lambda x: angle(x,top_left))
 ordered = [x + centroid for x in ordered]
 reduced = [x[0] for x in ordered]
 src_pts = np.array(reduced).astype(np.float32)
-out_pts = np.array(box(500)).astype(np.float32)
-print src_pts
-print out_pts
+width = int((src_pts[1][0] - src_pts[0][0] +src_pts[2][0] - src_pts[3][0])/2)
+height = int((src_pts[0][1] - src_pts[3][1] +src_pts[1][1] - src_pts[2][1])/2)
+out_pts = np.array(box(width,height)).astype(np.float32)
 transform = cv2.getPerspectiveTransform(src_pts,out_pts)
-warped = cv2.warpPerspective(img, transform, (500,500))
-
+warped = cv2.warpPerspective(gray, transform, (width,height))
+final = cv2.adaptiveThreshold(warped,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,31,15)
 # show the contour (outline) of the piece of paper
 # print "STEP 2: Find contours of paper"
 # cv2.drawContours(img, [screenCnt], -1, (0, 255, 0), 2)
@@ -66,12 +74,10 @@ dots = img.copy()
 for p in src_pts:
     cv2.circle(dots,tuple(p),5,(255,0,0))
 
-# plt.subplot(141),plt.imshow(img,cmap = 'gray')
-# plt.title('Original Image'), plt.xticks([]), plt.yticks([])
-# plt.subplot(142),plt.imshow(edges,cmap = 'gray')
-# plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(121),plt.imshow(dots,cmap = 'gray')
+plt.subplot(153),plt.imshow(dots,cmap = 'gray')
 plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(122),plt.imshow(warped,cmap = 'gray')
+plt.subplot(154),plt.imshow(warped,cmap = 'gray')
 plt.title('Warped Image'), plt.xticks([]), plt.yticks([])
+plt.subplot(155),plt.imshow(final,cmap = 'gray')
+plt.title('Final Image'), plt.xticks([]), plt.yticks([])
 plt.show()
