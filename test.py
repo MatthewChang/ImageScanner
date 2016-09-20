@@ -13,20 +13,26 @@ def normalized(a, axis=-1, order=2):
 def angle(a,b):
     a = normalized(a)
     b = normalized(b)
-    if(np.cross(a,b) >= 0):
-        return math.acos(np.vdot(a,b))
+    v = min(np.vdot(a,b),1)
+    if(v >= 0):
+        return math.acos(v)
     else:
-        return math.pi*2 - math.acos(np.vdot(a,b))
+        return math.pi*2 - math.acos(v)
 def box(width,height):
     return [np.array([0,height]),np.array([width,height]),np.array([width,0]),np.array([0,0])]
 
 img = cv2.imread('./test4.jpg')
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-edges = cv2.Canny(blurred,75,250)
+gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+#blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+blurred = cv2.medianBlur(gray, 11)
+edges = cv2.Canny(blurred,75,100)
+# edges = np.zeros(blurred[:,:,1].shape)
+# for i in range(0,3):
+#     edges = np.logical_or(edges,cv2.Canny(blurred[:,:,i],75,150) > 100)
+# edges = (edges*255).astype(np.uint8)
 
-plt.subplot(151),plt.imshow(img,cmap = 'gray')
-plt.title('Original Image'), plt.xticks([]), plt.yticks([])
+plt.subplot(151),plt.imshow(blurred,cmap = 'gray')
+plt.title('Blurred Image'), plt.xticks([]), plt.yticks([])
 plt.subplot(152),plt.imshow(edges,cmap = 'gray')
 plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
 
@@ -75,7 +81,7 @@ for p in src_pts:
     cv2.circle(dots,tuple(p),5,(255,0,0))
 
 plt.subplot(153),plt.imshow(dots,cmap = 'gray')
-plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
+plt.title('Dots Image'), plt.xticks([]), plt.yticks([])
 plt.subplot(154),plt.imshow(warped,cmap = 'gray')
 plt.title('Warped Image'), plt.xticks([]), plt.yticks([])
 plt.subplot(155),plt.imshow(final,cmap = 'gray')
