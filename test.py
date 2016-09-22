@@ -40,7 +40,8 @@ def growRegion(im,point):
                 F.append(new_point)
     return out_im
 
-img = cv2.imread('./test_real.jpg')
+#TODO: Try high passed histrogram looking for trough after first peak, with threshold for what counts as trough as peaks
+img = cv2.imread('./test4.jpg')
 if img.shape[0]*img.shape[1] > 250000:
     ratio = 500.0/img.shape[0]
     img = cv2.resize(img, (int(img.shape[1]*ratio),int(img.shape[0]*ratio)))
@@ -55,24 +56,53 @@ shifted = blurred_lab.astype(np.float32) - key_value.reshape((1,1,3))
 for i in range(0,3):
     shifted[:,:,i] = np.multiply(shifted[:,:,i],shifted[:,:,i])
 diff = np.sqrt(np.sum(shifted,2)).astype(np.uint8)
-regions = cv2.threshold(diff,20,255,cv2.THRESH_BINARY_INV)
+
+ret3,th3 = cv2.threshold(diff,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
+
 gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
 hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 thumb = cv2.cvtColor(blurred_lab, cv2.COLOR_LAB2BGR)
 blurred = cv2.medianBlur(gray, blur_size)
 edges = cv2.Canny(diff,0,30)
 
-grown = growRegion(diff,(size[0]/2,size[1]/2))
-#plt.hist(diff.ravel(),256,[0,256]); plt.show()
+#grown = growRegion(diff,(size[0]/2,size[1]/2))
+histr = cv2.calcHist([diff],[0],None,[256],[0,256])
+#histr = np.histogram(diff.ravel(),256,[0,256])
+window_width = 12
+conv_size = 2*window_width + 1
+avg_height = img.shape[0]*img.shape[1]/256
+histr_c = np.convolve(histr.transpose()[0],np.ones(conv_size)/conv_size,'valid')
+trough = -1
+peak = -1
+if(histr_c[1] <= histr_c[0]):
+    peak = 0
+for i in range(1,len(histr_c)-1):
+    if histr_c[i-1] < histr_c[i] and histr_c[i+1] <= histr_c[i]:
+        peak = i
+    if histr_c[i-1] >= histr_c[i] and histr_c[i+1] > histr_c[i] and histr_c[i] < histr_c[peak]/2:
+        trough = i
+        break
+regions = cv2.threshold(diff,trough+window_width,255,cv2.THRESH_BINARY_INV)
 
+# total = np.sum(histr)
+# med = np.mean(histr)
+# s = 0
+# i = 0
+# while s < total/2:
+#     s += histr[i]
+#     i += 1
+plt.plot(histr_c)
+plt.xlim([0,256])
+plt.axvline(x=trough)
+plt.axvline(x=peak)
+# plt.axhline(y=med)
+plt.show()
 plt.subplot(151),plt.imshow(thumb,cmap = 'gray')
 plt.title('Blurred Image'), plt.xticks([]), plt.yticks([])
 plt.subplot(152),plt.imshow(diff,cmap = 'gray')
 plt.title('diff Image'), plt.xticks([]), plt.yticks([])
 plt.subplot(153),plt.imshow(regions[1],cmap = 'gray')
 plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(154),plt.imshow(grown,cmap = 'gray')
-plt.title('Grown Image'), plt.xticks([]), plt.yticks([])
 
 
 (cnts, _) = cv2.findContours(edges.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
