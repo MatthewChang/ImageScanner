@@ -6,11 +6,14 @@ import pdb
 import sys
 from sets import Set
 
+PLOT=False
+
 def normalized(a, axis=-1, order=2):
     l2 = np.atleast_1d(np.linalg.norm(a, order, axis))
     l2[l2==0] = 1
     return a / np.expand_dims(l2, axis)
 
+#Computes the angle between the vectors a and b traced from a counter clockwise
 def angle(a,b):
     a = normalized(a)
     b = normalized(b)
@@ -41,14 +44,16 @@ def growRegion(im,point):
     return out_im
 
 #TODO: Try high passed histrogram looking for trough after first peak, with threshold for what counts as trough as peaks
-img = cv2.imread('./test4.jpg')
+img = cv2.imread('./test.jpg')
+orig = img.copy()
+scale_ratio = 1
 if img.shape[0]*img.shape[1] > 250000:
-    ratio = 500.0/img.shape[0]
-    img = cv2.resize(img, (int(img.shape[1]*ratio),int(img.shape[0]*ratio)))
+    scale_ratio = 500.0/img.shape[0]
+    img = cv2.resize(img, (int(img.shape[1]*scale_ratio),int(img.shape[0]*scale_ratio)))
 size = img.shape
 print size
 lab = cv2.cvtColor(img, cv2.COLOR_RGB2LAB)
-blur_size = lab.shape[0]/25
+blur_size = lab.shape[0]/50
 blur_size += 1 if (blur_size % 2 == 0) else 0
 blurred_lab = cv2.medianBlur(lab, blur_size)
 key_value = blurred_lab[size[0]/2,size[1]/2,:]
@@ -84,28 +89,20 @@ for i in range(1,len(histr_c)-1):
         break
 regions = cv2.threshold(diff,trough+window_width,255,cv2.THRESH_BINARY_INV)
 
-# total = np.sum(histr)
-# med = np.mean(histr)
-# s = 0
-# i = 0
-# while s < total/2:
-#     s += histr[i]
-#     i += 1
-plt.plot(histr_c)
-plt.xlim([0,256])
-plt.axvline(x=trough)
-plt.axvline(x=peak)
-# plt.axhline(y=med)
-plt.show()
-plt.subplot(151),plt.imshow(thumb,cmap = 'gray')
-plt.title('Blurred Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(152),plt.imshow(diff,cmap = 'gray')
-plt.title('diff Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(153),plt.imshow(regions[1],cmap = 'gray')
-plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
+if PLOT:
+    plt.plot(histr_c)
+    plt.xlim([0,256])
+    plt.axvline(x=trough)
+    plt.axvline(x=peak)
+    # plt.axhline(y=med)
+    plt.show()
+    plt.subplot(151),plt.imshow(thumb,cmap = 'gray')
+    plt.title('Blurred Image'), plt.xticks([]), plt.yticks([])
+    plt.subplot(152),plt.imshow(regions[1],cmap = 'gray')
+    plt.title('Thresh Image'), plt.xticks([]), plt.yticks([])
 
 
-(cnts, _) = cv2.findContours(edges.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+(cnts, _) = cv2.findContours(regions[1].copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 cnts = sorted(cnts, key = cv2.contourArea, reverse = True)[:5]
 # loop over the contours
 found = False
@@ -116,7 +113,7 @@ for c in cnts:
     # can assume that we have found our screen
     if len(approx) == 4:
         screenCnt = approx
-        found = False
+        found = True
         break
 
 if(not found):
@@ -132,27 +129,36 @@ ordered = sorted(shifted, key = lambda x: angle(x,top_left))
 ordered = [x + centroid for x in ordered]
 reduced = [x[0] for x in ordered]
 src_pts = np.array(reduced).astype(np.float32)
+
+#scale and start working on original image again
+src_pts = src_pts / scale_ratio
 width = int((src_pts[1][0] - src_pts[0][0] +src_pts[2][0] - src_pts[3][0])/2)
 height = int((src_pts[0][1] - src_pts[3][1] +src_pts[1][1] - src_pts[2][1])/2)
 out_pts = np.array(box(width,height)).astype(np.float32)
 transform = cv2.getPerspectiveTransform(src_pts,out_pts)
-import pdb; pdb.set_trace()
-warped = cv2.warpPerspective(gray, transform, (width,height))
-final = cv2.adaptiveThreshold(warped,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,31,15)
-# show the contour (outline) of the piece of paper
-# print "STEP 2: Find contours of paper"
-# cv2.drawContours(img, [screenCnt], -1, (0, 255, 0), 2)
-# cv2.imshow("Outline", img)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
-dots = img.copy()
-for p in src_pts:
-    cv2.circle(dots,tuple(p),5,(255,0,0))
+warped = cv2.warpPerspective(orig, transform, (width,height))
+warped_gray = cv2.cvtColor(warped, cv2.COLOR_RGB2GRAY)
 
-plt.subplot(153),plt.imshow(dots,cmap = 'gray')
-plt.title('Dots Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(154),plt.imshow(warped,cmap = 'gray')
-plt.title('Warped Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(155),plt.imshow(final,cmap = 'gray')
-plt.title('Final Image'), plt.xticks([]), plt.yticks([])
-plt.show()
+# blur = cv2.GaussianBlur(warped_gray,(3,3),0)
+# ret3,final = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+kernel_size = warped_gray.shape[0]/30
+kernel_size += 1 if kernel_size % 2 == 0 else 0
+final = cv2.adaptiveThreshold(warped_gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,kernel_size,15)
+
+dots = orig.copy()
+for p in src_pts:
+    cv2.circle(dots,tuple(p),20,(255,0,0),20)
+
+cv2.imwrite('final.png',final)
+if PLOT:
+    plt.subplot(153),plt.imshow(dots,cmap = 'gray')
+    plt.title('Dots Image'), plt.xticks([]), plt.yticks([])
+    plt.subplot(154),plt.imshow(warped,cmap = 'gray')
+    plt.title('Warped Image'), plt.xticks([]), plt.yticks([])
+    plt.subplot(155),plt.imshow(final,cmap = 'gray')
+    plt.title('Final Image'), plt.xticks([]), plt.yticks([])
+    plt.show()
+else:
+    plt.imshow(final,cmap = 'gray')
+    plt.title('Final Image'), plt.xticks([]), plt.yticks([])
+    plt.show()
